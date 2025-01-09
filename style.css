@@ -114,6 +114,25 @@ a:visited {
   font-weight: 800;
 }
 
+/*---------------------------Journal Class--------------------*/
+.icon__btns {
+  background-color: transparent;
+  border: none;
+  color: #eee;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.icon__btns:hover svg {
+  fill: #00c46a;
+  transition: all 0.3s;
+}
+.workout__heading {
+  cursor: default;
+}
+
+.del .workout__action,
 .form {
   background-color: var(--color-dark--2);
   border-radius: 5px;
@@ -218,4 +237,20 @@ a:visited {
 }
 .cycling-popup .leaflet-popup-content-wrapper {
   border-left: 5px solid var(--color-brand--1);
+}
+
+.delete__all__workout {
+  margin-bottom: 20px;
+  padding: 10px 20px;
+  margin-top: 0;
+}
+
+.delete__btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  font-weight: bold;
+  color: #eee;
+  background-color: #42484d;
+  margin: 0 auto;
 }

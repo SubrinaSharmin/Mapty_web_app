@@ -1,10 +1,12 @@
 const form = document.querySelector('.form');
 const containerWorkouts = document.querySelector('.workouts');
-const inputType = document.querySelector('.form__input--type');
-const inputDistance = document.querySelector('.form__input--distance');
-const inputDuration = document.querySelector('.form__input--duration');
-const inputCadence = document.querySelector('.form__input--cadence');
-const inputElevation = document.querySelector('.form__input--elevation');
+let inputType = document.querySelector('.form__input--type');
+let inputDistance = document.querySelector('.form__input--distance');
+let inputDuration = document.querySelector('.form__input--duration');
+let inputCadence = document.querySelector('.form__input--cadence');
+let inputElevation = document.querySelector('.form__input--elevation');
+
+const deleteAllWorkout = document.querySelector('.delete__btn');
 
 ///------------------------------Workout Architecture-----------------------------///
 //-------Parent class for workout------//
@@ -72,6 +74,7 @@ class App {
   #map;
   #mapEvent;
   #workouts = [];
+  #currentEditId;
 
   constructor() {
     // Get user's position
@@ -83,6 +86,9 @@ class App {
     form.addEventListener('submit', this._newWorkout.bind(this));
     inputType.addEventListener('change', this._toggleElevationField);
     containerWorkouts.addEventListener('click', this._moveToPopup.bind(this));
+    deleteAllWorkout.addEventListener('click', this._reset.bind(this));
+    containerWorkouts.addEventListener('click', this._deleteWorkout.bind(this));
+    containerWorkouts.addEventListener('click', this._editWorkout.bind(this));
   }
 
   _getPosition() {
@@ -113,12 +119,12 @@ class App {
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(this.#map);
 
-    L.circle(coords, {
-      color: '#3E7B27',
-      fillColor: '#85A947',
-      fillOpacity: 0.5,
-      radius: 100,
-    }).addTo(this.#map);
+    // L.circle(coords, {
+    //   color: '#3E7B27',
+    //   fillColor: '#85A947',
+    //   fillOpacity: 0.5,
+    //   radius: 100,
+    // }).addTo(this.#map);
     // Using leaflet build-in event method (on)
     //------Handling clicks on map------//
     this.#map.on('click', this._showForm.bind(this));
@@ -161,51 +167,74 @@ class App {
     e.preventDefault();
 
     //------Get data from form------//
-    const type = inputType.value;
+
     const distance = +inputDistance.value;
     const duration = +inputDuration.value;
-    const { lat, lng } = this.#mapEvent.latlng;
     let workout;
 
-    //------If workout running, create running object------//
-    if (type === 'running') {
-      const cadence = +inputCadence.value;
-      //------Check if data is valid------//
-      if (
-        !validInputs(distance, duration, cadence) ||
-        !positiveInputs(distance, duration, cadence)
-      )
-        return alert('Input have to be positive numbers!');
+    if (this.#currentEditId) {
+      // Update current workout(edit)
+      workout = this.#workouts.find(work => work.id === this.#currentEditId);
+      workout.distance = distance;
+      workout.duration = duration;
 
-      workout = new Running([lat, lng], distance, duration, cadence);
+      if (workout.type === 'running') {
+        workout.cadence = +inputCadence.value;
+      }
+      if (workout.type === 'cycling') {
+        workout.elevationGain = +inputElevation.value;
+      }
+
+      //------Render workout on list------//
+      this._renderWorkout(workout);
+      //------Set local storage to all workouts---------//
+      this._setLocalStorage();
+
+      //Clear current edit Id to prevent accidental updates.
+      this.#currentEditId = null;
+    } else {
+      const type = inputType.value;
+      const { lat, lng } = this.#mapEvent.latlng;
+
+      //------If workout running, create running object------//
+      if (type === 'running') {
+        const cadence = +inputCadence.value;
+        //------Check if data is valid------//
+        if (
+          !validInputs(distance, duration, cadence) ||
+          !positiveInputs(distance, duration, cadence)
+        )
+          return alert('Input have to be positive numbers!');
+
+        workout = new Running([lat, lng], distance, duration, cadence);
+      }
+
+      //------If workout cycling, create cycling object------//
+      if (type === 'cycling') {
+        const elevation = +inputElevation.value;
+        //------Check if data is valid------//
+        if (
+          !validInputs(distance, duration, elevation) ||
+          !positiveInputs(distance, duration)
+        )
+          return alert('Input have to be positive numbers!');
+        workout = new Cycling([lat, lng], distance, duration, elevation);
+      }
+
+      //------Add new object to workout------//
+      this.#workouts.push(workout);
+      //------Render workout on map as marker------//
+      this._renderWorkoutMarker(workout);
+      //------Render workout on list------//
+      this._renderWorkout(workout);
+      //------Set local storage to all workouts---------//
+      this._setLocalStorage();
+
+      //console.log(workout);
     }
 
-    //------If workout cycling, create cycling object------//
-    if (type === 'cycling') {
-      const elevation = +inputElevation.value;
-      //------Check if data is valid------//
-      if (
-        !validInputs(distance, duration, elevation) ||
-        !positiveInputs(distance, duration)
-      )
-        return alert('Input have to be positive numbers!');
-      workout = new Cycling([lat, lng], distance, duration, elevation);
-    }
-
-    //------Add new object to workout------//
-    this.#workouts.push(workout);
-    //console.log(workout);
-
-    //------Render workout on map as marker------//
-    this._renderWorkoutMarker(workout);
-
-    //------Render workout on list------//
-    this._renderWorkout(workout);
     //------Hide form + clear input fields------//
     this._hideForm();
-
-    //------Set local storage to all workouts---------//
-    this._setLocalStorage();
   }
 
   _renderWorkoutMarker(workout) {
@@ -229,6 +258,8 @@ class App {
   _renderWorkout(workout) {
     let html = `
     <li class="workout workout--${workout.type}" data-id=${workout.id}>
+      <button class="delete__single__workout">Delete</button>
+      <button class="edit__single__workout">Edit</button>
       <h2 class="workout__title">${workout.description}</h2>
         <div class="workout__details">
           <span class="workout__icon">${
@@ -316,9 +347,81 @@ class App {
     });
   }
 
-  reset() {
+  _reset() {
     localStorage.removeItem('workouts');
     location.reload();
+  }
+
+  _editWorkout(e) {
+    //Selecting the edit button when it was clicked.
+    if (e.target && e.target.classList.contains('edit__single__workout')) {
+      // Selecting the closest li element when the condition pass.
+      const editItem = e.target.closest('li');
+
+      // Get the data-id from the element
+      const id = editItem.dataset.id;
+      console.log(id);
+      // Matching the selected data with the clicked data using data-id.
+      const workout = this.#workouts.find(work => work.id === id);
+
+      // Pre-populating the form with existing data.
+      inputDistance.value = workout.distance;
+      inputDuration.value = workout.duration;
+      if (workout.type === 'running') {
+        inputCadence.value = workout.cadence;
+        // Hide elevation if it's a running workout
+        inputElevation.value = '';
+      }
+      if (workout.type === 'cycling') {
+        inputElevation.value = workout.elevationGain;
+        // Hide cadence if it's a cycling workout
+        inputCadence.value = '';
+      }
+
+      // Show the form for editing
+      form.classList.remove('hidden');
+      inputDistance.focus();
+
+      //Store the ID for use when updating
+      this.#currentEditId = id;
+    }
+  }
+
+  _deleteWorkout(e) {
+    // Selecting the button element when it gets clicked.
+    if (e.target && e.target.classList.contains('delete__single__workout')) {
+      // Get the workout from local storage and converting them to objects.
+      const workouts = JSON.parse(localStorage.getItem('workouts'));
+
+      // Selecting the closest li element to remove.
+      const deleteItem = e.target.closest('li');
+
+      // Get the data-id to remove selected item.
+      const id = deleteItem.dataset.id;
+
+      // Filter out the workout from the #workouts array
+      this.#workouts = this.#workouts.filter(work => work.id !== id);
+
+      if (workouts) {
+        // Updating the local storage by filtering out only the id matched in both data.
+        let updatedWorkout = workouts.filter(work => work.id !== id);
+
+        // Set the local storage with new data.
+        localStorage.setItem('workouts', JSON.stringify(updatedWorkout));
+
+        // Removing data from the UI
+        if (deleteItem) {
+          deleteItem.remove();
+          console.log(
+            `Workout with ${id} has been deleted from UI and Local storage.`
+          );
+        } else {
+          console.log('Data not found');
+        }
+      } else {
+        console.log('No items on local storage');
+      }
+    }
   }
 }
 /* In the App class the constructor method gets executed as soon as the app object gets created. So we can call the _getPosition method there , which is lot cleaner. */
